@@ -165,7 +165,22 @@ function forwardRequest(req, res, headerCome, dataChunkCome, done){
 		})
 	});
 
-	proxyReq.end();
+	var bodyLength = 0;
+	req.on("data", function (data){
+		bodyLength += data.length;
+
+		//so large, fuck you
+		if (bodyLength > 1e6){
+			req.connection.destroy();
+			return;
+		}
+
+		proxyReq.write(data);
+	})
+
+	req.on("end", function (){
+		proxyReq.end();
+	});
 }
 
 function hash(req){
