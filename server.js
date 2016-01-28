@@ -1,5 +1,10 @@
 var http = require('http');
 
+/*
+A class for handling cache.
+Support defining ttl per cache object.
+There are 2 cache maps, 1 for complete response object and 1 for partial response object.
+*/
 var cachee = {
 	cacheMap: {},
 	partialMap: {},
@@ -56,6 +61,9 @@ var cachee = {
 	}
 };
 
+/*
+A class for handling the request queue.
+*/
 var queuee = {
 	queueMap: {},
 
@@ -98,6 +106,7 @@ var queuee = {
 	}
 };
 
+//A handy function for cloning object. To be used for modifying headers without polluting the original headers.
 function clone(obj) {
     if(obj === null || typeof(obj) !== 'object' || 'isActiveClone' in obj)
         return obj;
@@ -115,6 +124,9 @@ function clone(obj) {
     return temp;
 }
 
+/*
+Create a request to the backend and perform the callbacks accordingly.
+*/
 function forwardRequest(req, res, headerCome, dataChunkCome, done){
 	var proxyReq = http.request({
 		hostname: "localhost",
@@ -183,6 +195,7 @@ function forwardRequest(req, res, headerCome, dataChunkCome, done){
 	});
 }
 
+//The hash function for producing the hash key of the cache for a request.
 function hash(req){
 	var host = req.headers.host;
 	var url = req.url;
@@ -190,6 +203,7 @@ function hash(req){
 	return host + url;
 }
 
+//Purge the cache. Only exact matching is supported at this moment.
 function purge(req, res){
 	var hashKey = hash(req);
 	cachee.purge(hashKey);
@@ -197,6 +211,13 @@ function purge(req, res){
 	res.end("Purged");
 }
 
+
+
+/*
+The 3 functions, headerComeAndWriteToRes, dataChunkComeAndWriteToRes and doneButNoCache
+handle the case that the request is not cached and forwarded to the backend directly.
+They are used as the callbacks of forwardRequest().
+*/
 function headerComeAndWriteToRes(req, res, responseObj){
 	res.writeHead(responseObj.statusCode, responseObj.statusMessage, responseObj.headers);
 }
@@ -205,6 +226,18 @@ function dataChunkComeAndWriteToRes(req, res, chunk){
 	res.write(chunk);
 }
 
+function doneButNoCache(req, res, responseObj){
+	res.end();
+}
+
+
+
+/*
+The 3 functions, headerComeAndWriteToQueue, dataChunkComeAndWriteToQueue and doneAndKeepCache
+handle the case that the request is cached.
+When data arrives, they forward the data to all the queued requests.
+At the end, it writes the response object to cache such that it can be re-used later.
+*/
 function headerComeAndWriteToQueue(req, res, responseObj){
 	var hashKey = hash(req);
 	queuee.each(hashKey, function (obj){
@@ -229,10 +262,10 @@ function doneAndKeepCache(req, res, responseObj){
 	});
 }
 
-function doneButNoCache(req, res, responseObj){
-	res.end();
-}
-
+/*
+When there are simultaneous requests to the same URL, the one that comes first will be forwarded to the backend.
+Then latter one will stay in the queue. If there is any partial responded data, this function will return it to the latter request.
+*/
 function writeExistingResponseObj(hashKey, req, res){
 	var responseObj = cachee.getPartial(hashKey);
 	if (responseObj == null){
@@ -247,6 +280,11 @@ function writeExistingResponseObj(hashKey, req, res){
 	}
 }
 
+/*
+Respond the responseObj. The responseObj should be a complete response object.
+Here you may modify the headers, the body or whatever you can think of.
+** Note that the partial object is not passed through this function. The modification you made here will not affect the partial object.
+*/
 function respond(req, res, responseObj, hit){
 	if (hit){
 		var headers = clone(responseObj.headers);
@@ -258,6 +296,15 @@ function respond(req, res, responseObj, hit){
 	res.end(responseObj.body);
 }
 
+/*
+As the name suggested, it first checks if it is cached or not (and also if it is expired or not).
+If cache is available, simply responds with the cached object.
+Otherwise, forward the request to the backend and cache it such that it can be re-used next time.
+
+It also handles simultaneous requests to the same URL.
+i.e. When there are 2 requests requesting the same URL, only 1 request will be forwarded to backend (the one comes first).
+When the latter request comes, all the responded data from the former request will be sent to it.
+*/
 function useCacheIfExist(req, res){
 	var hashKey = hash(req);
 
@@ -295,13 +342,13 @@ var recv = function (req, res){
 	return false;
 };
 
-var reqCount = 0;
 var server = http.createServer(function(req, res) {
-	req.reqIdx = reqCount++;
 	var handled = false;
 
 	var method = req.method.toLowerCase();
 
+	//Handle GET and PURGE requests only
+	//Others like POST, PUT blablabla are forwarded directly
 	if (method == "get"){
 		handled = recv(req, res);
 	}else if (method == "purge"){
