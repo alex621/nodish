@@ -332,7 +332,24 @@ var recv = function (req, res){
 	var url = req.url;
 
 	if (host == "kiwsy.com"){
-		if (url == "/"){
+		var urlMatch = false;
+		urlMatch = urlMatch || (url == "/");
+
+		if (!urlMatch){
+			urlMatch = urlMatch || (url.substr(0, 8) == "/wp-json");
+		}
+
+		if (!urlMatch){
+			urlMatch = urlMatch || (url.substr(0, 19) == "/wp-content/uploads");
+		}
+
+		if (!urlMatch){
+			urlMatch = urlMatch || (new RegExp("^/20[0-9][0-9]/").test(url));
+		}
+
+		if (urlMatch){
+			req.headers.cookie = "";
+
 			useCacheIfExist(req, res);
 
 			return true;
