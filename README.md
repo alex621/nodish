@@ -28,3 +28,9 @@ sudo node server.js
 ```
 
 That simple. This starts a proxy server listening to port 80.
+
+## License
+
+WTFPL is used. _Do What The Fuck You Want To Public License_
+
+In short, you just DO WHAT THE FUCK YOU WANT TO.
