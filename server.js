@@ -1,4 +1,26 @@
 var http = require('http');
+var https = require('https');
+var fs = require('fs');
+
+var config = {
+	//single backend only at this moment
+	backend: {
+		host: "localhost",
+		port: 8080
+	},
+
+	https: {
+		enabled: true,
+		port: 443,
+		keyFile: "kiwsy.key",
+		certFile: "kiwsy.crt"
+	},
+
+	http: {
+		enabled: true,
+		port: 80
+	}
+};
 
 /*
 A class for handling cache.
@@ -129,8 +151,8 @@ Create a request to the backend and perform the callbacks accordingly.
 */
 function forwardRequest(req, res, headerCome, dataChunkCome, done){
 	var proxyReq = http.request({
-		hostname: "localhost",
-		port: 8080,
+		hostname: config.backend.host,
+		port: config.backend.port,
 		method: req.method,
 		path: req.url,
 		headers: req.headers,
@@ -359,7 +381,7 @@ var recv = function (req, res){
 	return false;
 };
 
-var server = http.createServer(function(req, res) {
+var requestHandler = function(req, res) {
 	var handled = false;
 
 	var method = req.method.toLowerCase();
@@ -376,8 +398,23 @@ var server = http.createServer(function(req, res) {
 	if (! handled){
 		forwardRequest(req, res, headerComeAndWriteToRes, dataChunkComeAndWriteToRes, doneButNoCache);
 	}
-});
+};
 
+if (config.https.enabled){
+	https.createServer({
+		key: fs.readFileSync(config.https.keyFile),
+		cert: fs.readFileSync(config.https.certFile)
+	}, requestHandler).listen(config.https.port);
+}
 
-console.log("listening on port 80")
-server.listen(80);
+if (config.http.enabled){
+	http.createServer(requestHandler).listen(config.http.port);
+}
+
+console.log("Nodish started");
+if (config.http.enabled){
+	console.log("\tListening on " + config.http.port + " for HTTP");
+}
+if (config.https.enabled){
+	console.log("\tListening on " + config.https.port + " for HTTPS");
+}
